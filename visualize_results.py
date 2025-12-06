@@ -1,291 +1,402 @@
 #!/usr/bin/env python3
 """
-visualize_results.py
+plot_experiments.py
 
-Visualisation script for the simulation experiments.
+Generate publication-ready figures for Experiment 1 and Experiment 2.
 
-Generates PDF figures ready for inclusion in LaTeX:
+Input CSVs (expected in the working directory by default):
+  - experiment1_runs.csv
+  - experiment2_user_type_stats.csv
+  - experiment2_fairness.csv
 
-Experiment 1 (single-user + alpha sweep):
-    - exp1_regret.pdf:
-        Mean regret (oracle_utility - utility) vs. episode,
-        per policy (including BA with different alpha_mix).
-    - exp1_alignment.pdf:
-        Mean preference alignment vs. episode, per policy.
-
-Experiment 2 (population + fairness):
-    - exp2_mean_utility_per_usertype.pdf:
-        Grouped bar chart of mean utility for each user type and policy.
-    - exp2_fairness.pdf:
-        Bar chart of overall mean utility per policy, annotated with
-        utility variance and min-utility (worst-off users).
-
-Usage examples:
-
-    # Experiment 1
-    python visualize_results.py \
-        --experiment 1 \
-        --input results/exp1_rerun/experiment1_runs.csv \
-        --output-dir results/figures
-
-    # Experiment 2
-    python visualize_results.py \
-        --experiment 2 \
-        --input-stats results/exp2_rerun/experiment2_user_type_stats.csv \
-        --input-fairness results/exp2_rerun/experiment2_fairness.csv \
-        --output-dir results/figures
+Output (in ./figures by default):
+  - exp1_regret_panels.pdf
+  - exp1_utility_barplots.pdf
+  - exp2_user_type_outcomes.pdf
+  - exp2_fairness.pdf
 """
 
-from __future__ import annotations
-
 import argparse
-from pathlib import Path
-from typing import Optional
+import os
 
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# General plotting style
 # ---------------------------------------------------------------------------
 
-def _ensure_output_dir(path: Path) -> None:
-    """Create the output directory if it does not exist."""
-    path.mkdir(parents=True, exist_ok=True)
+def configure_plot_style():
+    """Set a clean, consistent style for all plots."""
+    sns.set_theme(context="paper", style="whitegrid", font_scale=1.2)
+    plt.rcParams.update({
+        "figure.dpi": 150,
+        "savefig.dpi": 300,
+        "axes.titlesize": 12,
+        "axes.labelsize": 11,
+        "legend.fontsize": 9,
+        "xtick.labelsize": 9,
+        "ytick.labelsize": 9,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+    })
 
 
 # ---------------------------------------------------------------------------
-# Experiment 1 plots
+# Experiment 1: Regret and Utility
 # ---------------------------------------------------------------------------
 
-def plot_experiment1(
-    csv_path: Path,
-    output_dir: Path,
-    user_type_name: Optional[str] = None,
-) -> None:
+def plot_experiment1_regret_panels(df_exp1: pd.DataFrame, out_path: str):
     """
-    Generate Experiment 1 plots:
+    Create a 1×2 panel figure for Experiment 1 showing regret over episodes.
 
-        - exp1_regret.pdf
-        - exp1_alignment.pdf
-
-    Args:
-        csv_path: Path to experiment1_runs.csv.
-        output_dir: Directory where PDF files will be stored.
-        user_type_name: Optional filter for a specific user archetype.
+    Panel (a): Baseline policies (NE, AE, NO, PO, BA with alpha_mix = 0.5)
+    Panel (b): BA policy with alpha sweep (alpha_mix ∈ {0, 0.25, 0.5, 0.75, 1.0})
     """
-    _ensure_output_dir(output_dir)
+    # Ensure we only plot experiment 1
+    df = df_exp1[df_exp1["experiment"] == 1].copy()
 
-    df = pd.read_csv(csv_path)
+    # Define policy order and labels for consistency
+    baseline_policies = ["NE", "AE", "NO", "PO", "BA"]
+    policy_labels = {
+        "NE": "No Explanations (NE)",
+        "AE": "Always Explain (AE)",
+        "NO": "Noisy (NO)",
+        "PO": "Policy-Only (PO)",
+        "BA": "Bayesian (BA, α=0.5)",
+    }
 
-    # Optionally filter by a specific user archetype (usually "Minimalist").
-    if user_type_name is not None:
-        df = df[df["user_type"] == user_type_name]
+    # Split baseline vs BA alpha-sweep
+    # Baselines: all policies, with BA restricted to alpha_mix=0.5
+    baseline_mask = df["policy"].isin(["NE", "AE", "NO", "PO"]) | (
+        (df["policy"] == "BA") & (df["alpha_mix"] == 0.5)
+    )
+    df_baseline = df[baseline_mask].copy()
 
-    # Some policies (if oracle was not used) may have NaN in regret;
-    # we only use rows where regret is defined for plotting.
-    df_reg = df.dropna(subset=["regret"]).copy()
+    # BA alpha sweep: only BA, all alpha_mix values
+    df_ba = df[df["policy"] == "BA"].copy()
 
-    # ----------------------------------------------------------------------
-    # 1) Regret vs episode
-    # ----------------------------------------------------------------------
-    # Group by policy, alpha, and episode; compute mean regret.
-    regret_group = df_reg.groupby(
-        ["policy", "alpha_mix", "episode"]
-    )["regret"].mean().reset_index()
+    # Create figure and axes
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
+    ax_base, ax_ba = axes
 
-    plt.figure(figsize=(5, 3))
-    for (policy, alpha), group in regret_group.groupby(["policy", "alpha_mix"]):
-        # alpha_mix is NaN for non-BA policies; pretty-print label accordingly.
-        if pd.isna(alpha) or alpha == "":
-            label = str(policy)
+    # ---------- Panel (a): Baseline policies ----------
+    for pol in baseline_policies:
+        if pol == "BA":
+            sub = df_baseline[(df_baseline["policy"] == "BA") &
+                              (df_baseline["alpha_mix"] == 0.5)]
         else:
-            # Use a compact “alpha” format (no trailing .0 if possible).
-            label = "{} (α={})".format(policy, alpha)
-        plt.plot(group["episode"], group["regret"], label=label)
+            sub = df_baseline[df_baseline["policy"] == pol]
 
-    plt.xlabel("Episode")
-    plt.ylabel("Mean Regret (oracle − policy)")
-    plt.title("Experiment 1: Regret over Episodes")
-    plt.legend(loc="best", fontsize=7)
-    plt.tight_layout()
+        if sub.empty:
+            continue
 
-    reg_path = output_dir / "exp1_regret.pdf"
-    plt.savefig(reg_path, bbox_inches="tight")
-    plt.close()
-    print("[Visualization] Saved", reg_path)
+        ax_base.plot(
+            sub["episode"],
+            sub["regret"],
+            marker="o",
+            markersize=2,
+            linewidth=1.0,
+            label=policy_labels.get(pol, pol),
+        )
 
-    # ----------------------------------------------------------------------
-    # 2) Preference alignment vs episode
-    # ----------------------------------------------------------------------
-    # Alignment = mean of binary feedback across attribute families:
-    # here approximated as the mean of feedback_modality/scope/detail.
-    df["alignment"] = df[
-        ["feedback_modality", "feedback_scope", "feedback_detail"]
-    ].mean(axis=1)
+    ax_base.set_title("(a) Baseline policies")
+    ax_base.set_xlabel("Episode")
+    ax_base.set_ylabel("Regret (oracle utility – actual utility)")
+    ax_base.legend(frameon=False)
 
-    align_group = df.groupby(
-        ["policy", "alpha_mix", "episode"]
-    )["alignment"].mean().reset_index()
+    # ---------- Panel (b): BA alpha sweep ----------
+    # Use a consistent order of alpha values
+    alpha_values = sorted([a for a in df_ba["alpha_mix"].dropna().unique()])
+    for alpha in alpha_values:
+        sub = df_ba[df_ba["alpha_mix"] == alpha]
+        if sub.empty:
+            continue
 
-    plt.figure(figsize=(5, 3))
-    for (policy, alpha), group in align_group.groupby(["policy", "alpha_mix"]):
-        if pd.isna(alpha) or alpha == "":
-            label = str(policy)
-        else:
-            label = "{} (α={})".format(policy, alpha)
-        plt.plot(group["episode"], group["alignment"], label=label)
+        ax_ba.plot(
+            sub["episode"],
+            sub["regret"],
+            marker="o",
+            markersize=2,
+            linewidth=1.0,
+            label=f"α = {alpha:g}",
+        )
 
-    plt.xlabel("Episode")
-    plt.ylabel("Mean Alignment")
-    plt.title("Experiment 1: Preference Alignment over Episodes")
-    plt.legend(loc="best", fontsize=7)
-    plt.tight_layout()
+    ax_ba.set_title("(b) BA policy: α-sweep")
+    ax_ba.set_xlabel("Episode")
+    ax_ba.legend(frameon=False, title="Mixing parameter")
 
-    align_path = output_dir / "exp1_alignment.pdf"
-    plt.savefig(align_path, bbox_inches="tight")
-    plt.close()
-    print("[Visualization] Saved", align_path)
+    # Layout & save
+    fig.tight_layout()
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
 
 
-# ---------------------------------------------------------------------------
-# Experiment 2 plots
-# ---------------------------------------------------------------------------
-
-def plot_experiment2(
-    stats_path: Path,
-    fairness_path: Path,
-    output_dir: Path,
-) -> None:
+def plot_experiment1_utility_bars(df_exp1: pd.DataFrame, out_path: str):
     """
-    Generate Experiment 2 plots:
+    Create a 1×2 panel figure summarizing mean utility for Experiment 1.
 
-        - exp2_mean_utility_per_usertype.pdf
-        - exp2_fairness.pdf
-
-    Args:
-        stats_path: Path to experiment2_user_type_stats.csv.
-        fairness_path: Path to experiment2_fairness.csv.
-        output_dir: Directory where PDF files will be stored.
+    Panel (a): mean utility per baseline policy (NE, AE, NO, PO, BA α=0.5)
+    Panel (b): mean utility for BA over alpha_mix ∈ {0, 0.25, 0.5, 0.75, 1.0}
     """
-    _ensure_output_dir(output_dir)
+    df = df_exp1[df_exp1["experiment"] == 1].copy()
 
-    stats_df = pd.read_csv(stats_path)
-    fair_df = pd.read_csv(fairness_path)
+    # Baseline policies (with BA fixed at alpha_mix = 0.5)
+    baseline_mask = df["policy"].isin(["NE", "AE", "NO", "PO"]) | (
+        (df["policy"] == "BA") & (df["alpha_mix"] == 0.5)
+    )
+    df_baseline = df[baseline_mask].copy()
 
-    # ----------------------------------------------------------------------
-    # 1) Mean utility per user_type x policy (grouped bar chart)
-    # ----------------------------------------------------------------------
-    # Pivot so that user_type are rows and policies are columns.
-    pivot = stats_df.pivot(
-        index="user_type",
-        columns="policy",
-        values="mean_utility",
+    # Aggregate mean utility per policy for baselines
+    baseline_summary = (
+        df_baseline
+        .groupby("policy")["utility"]
+        .agg(["mean", "std"])
+        .reindex(["NE", "AE", "NO", "PO", "BA"])
+        .reset_index()
     )
 
-    plt.figure(figsize=(6, 3))
-    pivot.plot(kind="bar")
-    plt.xlabel("User Type")
-    plt.ylabel("Mean Utility")
-    plt.title("Experiment 2: Mean Utility per User Type and Policy")
-    plt.legend(loc="best", fontsize=7)
-    plt.tight_layout()
+    # BA alpha sweep: aggregate mean utility per alpha_mix
+    df_ba = df[df["policy"] == "BA"].copy()
+    ba_summary = (
+        df_ba
+        .groupby("alpha_mix")["utility"]
+        .agg(["mean", "std"])
+        .reset_index()
+        .sort_values("alpha_mix")
+    )
 
-    util_path = output_dir / "exp2_mean_utility_per_usertype.pdf"
-    plt.savefig(util_path, bbox_inches="tight")
-    plt.close()
-    print("[Visualization] Saved", util_path)
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
+    ax_left, ax_right = axes
 
-    # ----------------------------------------------------------------------
-    # 2) Fairness summary across policies
-    # ----------------------------------------------------------------------
-    # Each bar is a policy with overall_mean_utility.
-    # We annotate bars with variance and min-utility.
-    plt.figure(figsize=(5, 3))
-    x_positions = range(len(fair_df))
-    plt.bar(x_positions, fair_df["overall_mean_utility"])
+    # ---------- Panel (a): baseline policies ----------
+    sns.barplot(
+        data=baseline_summary,
+        x="policy",
+        y="mean",
+        ax=ax_left,
+        errorbar=None,
+    )
+    # Add error bars manually (std)
+    ax_left.errorbar(
+        x=np.arange(len(baseline_summary)),
+        y=baseline_summary["mean"],
+        yerr=baseline_summary["std"],
+        fmt="none",
+        capsize=4,
+        linewidth=1.0,
+    )
+    ax_left.set_title("(a) Mean utility per baseline policy")
+    ax_left.set_xlabel("Policy")
+    ax_left.set_ylabel("Mean utility (±1 SD)")
 
-    plt.xticks(x_positions, fair_df["policy"])
-    plt.xlabel("Policy")
-    plt.ylabel("Overall Mean Utility")
-    plt.title("Experiment 2: Fairness Summary")
+    # ---------- Panel (b): BA alpha sweep ----------
+    sns.barplot(
+        data=ba_summary,
+        x="alpha_mix",
+        y="mean",
+        ax=ax_right,
+        errorbar=None,
+    )
+    ax_right.errorbar(
+        x=np.arange(len(ba_summary)),
+        y=ba_summary["mean"],
+        yerr=ba_summary["std"],
+        fmt="none",
+        capsize=4,
+        linewidth=1.0,
+    )
+    ax_right.set_title("(b) BA policy: mean utility vs α")
+    ax_right.set_xlabel("Mixing parameter α")
+    ax_right.set_ylabel("Mean utility (±1 SD)")
 
-    # Annotate each bar with variance and min-utility (worst-off users).
-    for i, row in fair_df.iterrows():
-        text = "var={:.2f}\nmin={:.2f}".format(
-            row["utility_variance"], row["min_utility"]
-        )
-        plt.text(
-            i,
-            row["overall_mean_utility"],
-            text,
-            ha="center",
-            va="bottom",
-            fontsize=6,
-        )
-
-    plt.tight_layout()
-    fair_path = output_dir / "exp2_fairness.pdf"
-    plt.savefig(fair_path, bbox_inches="tight")
-    plt.close()
-    print("[Visualization] Saved", fair_path)
+    fig.tight_layout()
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
 
 
 # ---------------------------------------------------------------------------
-# CLI
+# Experiment 2: User-type outcomes and fairness
 # ---------------------------------------------------------------------------
 
-def main() -> None:
+def plot_experiment2_user_type_outcomes(df_stats: pd.DataFrame, out_path: str):
+    """
+    Create a 2×2 grid of subplots for Experiment 2.
+
+    For each user type:
+      - X-axis: policy (NE, AE, NO, PO, BA)
+      - Bars: mean utility (with standard deviation error bars)
+      - Line (secondary axis): mean alignment
+
+    This gives a compact overview of how each policy performs across user types.
+    """
+    df = df_stats[df_stats["experiment"] == 2].copy()
+
+    # Fix ordering
+    user_types_order = ["Minimalist", "ContextHungry", "VisualLearner", "NormFollower"]
+    policy_order = ["NE", "AE", "NO", "PO", "BA"]
+
+    # Create figure with 2×2 subplots
+    fig, axes = plt.subplots(2, 2, figsize=(10, 8), sharey=False)
+    axes = axes.flatten()
+
+    for i, user_type in enumerate(user_types_order):
+        ax = axes[i]
+        sub = df[df["user_type"] == user_type].copy()
+        # Reindex so that all policies appear in the same order
+        sub = sub.set_index("policy").reindex(policy_order).reset_index()
+
+        # Primary axis: barplot of mean utility
+        sns.barplot(
+            data=sub,
+            x="policy",
+            y="mean_utility",
+            ax=ax,
+            errorbar=None,
+        )
+        # Add explicit error bars (std_utility)
+        ax.errorbar(
+            x=np.arange(len(sub)),
+            y=sub["mean_utility"],
+            yerr=sub["std_utility"],
+            fmt="none",
+            capsize=4,
+            linewidth=1.0,
+        )
+        ax.set_title(user_type)
+        ax.set_xlabel("Policy")
+        ax.set_ylabel("Mean utility")
+
+        # Secondary axis: line plot of mean alignment
+        ax2 = ax.twinx()
+        ax2.plot(
+            np.arange(len(sub)),
+            sub["mean_alignment"],
+            marker="o",
+            linewidth=1.0,
+        )
+        ax2.set_ylabel("Mean alignment", rotation=270, labelpad=15)
+
+        # Improve tick labels spacing
+        ax.set_xticklabels(policy_order)
+
+    fig.suptitle("Experiment 2: Outcomes per user type", y=0.98)
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_experiment2_fairness(df_fair: pd.DataFrame, out_path: str):
+    """
+    Create a fairness summary figure for Experiment 2.
+
+    For each policy:
+      - Bar: overall mean utility
+      - Vertical line: min to max utility (across user types)
+      - Optional marker: mean (again) for clarity
+
+    This visualizes both performance and disparity across user types.
+    """
+    df = df_fair[df_fair["experiment"] == 2].copy()
+    policy_order = ["NE", "AE", "NO", "PO", "BA"]
+    df = df.set_index("policy").reindex(policy_order).reset_index()
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+
+    # Barplot for overall mean utility
+    sns.barplot(
+        data=df,
+        x="policy",
+        y="overall_mean_utility",
+        ax=ax,
+        errorbar=None,
+    )
+
+    # Add min–max ranges as vertical lines
+    for i, row in df.iterrows():
+        ax.vlines(
+            x=i,
+            ymin=row["min_utility"],
+            ymax=row["max_utility"],
+            linewidth=1.5,
+        )
+
+    ax.set_xlabel("Policy")
+    ax.set_ylabel("Overall mean utility")
+    ax.set_title("Experiment 2: Fairness across user types\n(min–max range per policy)")
+
+    fig.tight_layout()
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Main CLI
+# ---------------------------------------------------------------------------
+
+def main():
     parser = argparse.ArgumentParser(
-        description="Visualize simulation results for preference-aware explanations."
+        description="Generate figures for Experiment 1 and Experiment 2."
     )
     parser.add_argument(
-        "--experiment", type=int, choices=[1, 2], required=True,
-        help="Which experiment to visualize: 1 (single-user) or 2 (population).",
+        "--exp1_csv",
+        type=str,
+        default="results/exp1/experiment1_runs.csv",
+        help="Path to Experiment 1 runs CSV (default: experiment1_runs.csv)",
     )
     parser.add_argument(
-        "--input", type=str,
-        help="Input CSV for Experiment 1: experiment1_runs.csv.",
+        "--exp2_stats_csv",
+        type=str,
+        default="results/exp2/experiment2_user_type_stats.csv",
+        help="Path to Experiment 2 user-type stats CSV (default: experiment2_user_type_stats.csv)",
     )
     parser.add_argument(
-        "--input-stats", type=str,
-        help="User-type stats CSV for Experiment 2: experiment2_user_type_stats.csv.",
+        "--exp2_fair_csv",
+        type=str,
+        default="results/exp2/experiment2_fairness.csv",
+        help="Path to Experiment 2 fairness CSV (default: experiment2_fairness.csv)",
     )
     parser.add_argument(
-        "--input-fairness", type=str,
-        help="Fairness CSV for Experiment 2: experiment2_fairness.csv.",
+        "--out_dir",
+        type=str,
+        default="results/figures",
+        help="Directory to save figures into (default: ./figures)",
     )
-    parser.add_argument(
-        "--output-dir", type=str, required=True,
-        help="Directory to store output figures.",
-    )
-    parser.add_argument(
-        "--user-type", type=str, default=None,
-        help="Optional filter by user type in Experiment 1 (e.g., Minimalist).",
-    )
-
     args = parser.parse_args()
-    output_dir = Path(args.output_dir)
 
-    if args.experiment == 1:
-        if args.input is None:
-            raise ValueError("--input is required for experiment 1.")
-        plot_experiment1(
-            csv_path=Path(args.input),
-            output_dir=output_dir,
-            user_type_name=args.user_type,
-        )
-    else:
-        if args.input_stats is None or args.input_fairness is None:
-            raise ValueError(
-                "--input-stats and --input-fairness are required for experiment 2."
-            )
-        plot_experiment2(
-            stats_path=Path(args.input_stats),
-            fairness_path=Path(args.input_fairness),
-            output_dir=output_dir,
-        )
+    # Create output directory if needed
+    os.makedirs(args.out_dir, exist_ok=True)
+
+    # Load CSVs
+    exp1 = pd.read_csv(args.exp1_csv)
+    exp2_stats = pd.read_csv(args.exp2_stats_csv)
+    exp2_fair = pd.read_csv(args.exp2_fair_csv)
+
+    # Global style
+    configure_plot_style()
+
+    # ---------------- Experiment 1 ----------------
+    plot_experiment1_regret_panels(
+        exp1,
+        out_path=os.path.join(args.out_dir, "exp1_regret_panels.pdf"),
+    )
+    plot_experiment1_utility_bars(
+        exp1,
+        out_path=os.path.join(args.out_dir, "exp1_utility_barplots.pdf"),
+    )
+
+    # ---------------- Experiment 2 ----------------
+    plot_experiment2_user_type_outcomes(
+        exp2_stats,
+        out_path=os.path.join(args.out_dir, "exp2_user_type_outcomes.pdf"),
+    )
+    plot_experiment2_fairness(
+        exp2_fair,
+        out_path=os.path.join(args.out_dir, "exp2_fairness.pdf"),
+    )
 
 
 if __name__ == "__main__":

@@ -9,17 +9,43 @@ Expected input CSVs (in the working directory by default):
   - experiment2_user_type_stats.csv
   - experiment2_fairness.csv
 
-Output (in ./figures by default), including multiple Experiment 1 variants:
-  - exp1_regret_band.pdf           (mean ± std bands over time)
-  - exp1_regret_final_box.pdf      (RECOMMENDED for the LBR)
-  - exp1_regret_slope.pdf          (start vs end slope chart)
-  - exp1_regret_heatmap.pdf        (binned heatmap over time)
+Output (in ./figures by default):
 
-  - exp2_user_type_outcomes.pdf    (per-user-type mean utility + alignment)
-  - exp2_fairness.pdf              (overall fairness summary)
+  Experiment 1 (Minimalist user)
+  --------------------------------
+  - exp1_regret_band.pdf
+        Mean ± std regret over episodes for a subset of policies.
+        Still shows temporal dynamics, but no spaghetti.
 
-Use `exp1_regret_final_box.pdf` in the LBR unless you have a strong reason
-to show temporal dynamics explicitly.
+  - exp1_regret_final_bar.pdf   <-- RECOMMENDED FOR THE LBR
+        Final-episode regret as a simple bar+dot plot for each
+        policy / BA–α variant. Best choice given deterministic
+        convergence (zero variance within each variant).
+
+  - exp1_regret_slope.pdf
+        Start vs. end mean regret per variant (slope chart).
+
+  - exp1_regret_heatmap.pdf
+        Binned heatmap of mean regret over time for each variant.
+
+  Experiment 2 (population-level)
+  --------------------------------
+  - exp2_user_type_outcomes.pdf
+        2×2 grid: mean utility (bars) + mean alignment (line)
+        for each user archetype and policy.
+
+  - exp2_fairness.pdf
+        Overall mean utility per policy + min–max utility range
+        across user types (fairness summary).
+
+Typical usage:
+    python3 plot_experiments.py
+
+You can then include, for example:
+    figures/exp1_regret_final_bar.pdf
+    figures/exp2_user_type_outcomes.pdf
+    figures/exp2_fairness.pdf
+in your LBR.
 """
 
 import argparse
@@ -36,7 +62,12 @@ import seaborn as sns
 # ---------------------------------------------------------------------------
 
 def configure_plot_style():
-    """Set a clean, consistent style for all plots."""
+    """
+    Configure a consistent, paper-friendly style for all plots.
+
+    We use seaborn's "paper" context and a whitegrid background, plus a few
+    rcParams tweaks for font sizes and spine visibility.
+    """
     sns.set_theme(context="paper", style="whitegrid", font_scale=1.2)
     plt.rcParams.update({
         "figure.dpi": 150,
@@ -56,11 +87,24 @@ def configure_plot_style():
 # ======================================================================
 
 def _prepare_exp1_df(df_exp1: pd.DataFrame) -> pd.DataFrame:
-    """Filter and return only Experiment 1 data with a clean copy."""
+    """
+    Filter and return only Experiment 1 data with a clean copy.
+
+    Assumes the CSV has:
+        - a column 'experiment' (1 or 2)
+        - a column 'policy' (NE, AE, NO, PO, BA)
+        - a column 'episode' (int)
+        - a column 'regret' (float)
+        - optionally 'alpha_mix' (float) for BA
+
+    For non-BA policies, alpha_mix is filled with 0.0 for convenience.
+    """
     df = df_exp1[df_exp1["experiment"] == 1].copy()
-    # Ensure alpha_mix exists for all rows (fill non-BA with 0.0 for convenience)
+
+    # Ensure alpha_mix exists for all rows
     if "alpha_mix" not in df.columns:
         df["alpha_mix"] = 0.0
+
     return df
 
 
@@ -68,13 +112,17 @@ def _policy_variant_label(row) -> str:
     """
     Helper: construct a compact label combining policy and alpha (for BA).
 
-    NE, AE, NO, PO stay as-is.
-    BA becomes e.g. 'BA-α=0.0', 'BA-α=0.5'.
+    - NE, AE, NO, PO stay as-is (e.g., "NE").
+    - BA rows become e.g. 'BA-α=0.0', 'BA-α=0.5', etc.
+
+    This keeps plot legends concise and ordering manageable.
     """
     pol = row["policy"]
     if pol != "BA":
         return pol
+
     alpha = row["alpha_mix"]
+    # Use :g to avoid trailing zeros like 0.500000
     return f"BA-α={alpha:g}"
 
 
@@ -84,12 +132,15 @@ def _policy_variant_label(row) -> str:
 
 def plot_exp1_regret_band(df_exp1: pd.DataFrame, out_path: str):
     """
-    Plot regret over episodes as mean ± std bands for a small set of policies
+    Plot regret over episodes as mean ± std bands for a *subset* of policies
     to avoid spaghetti.
 
     We show:
       - NE, AE, PO
       - BA with α ∈ {0.0, 0.5, 1.0}
+
+    This still conveys the temporal learning dynamics, but with a small
+    number of bands instead of 10 overlapping lines.
     """
     df = _prepare_exp1_df(df_exp1)
 
@@ -109,6 +160,7 @@ def plot_exp1_regret_band(df_exp1: pd.DataFrame, out_path: str):
         .reset_index()
     )
 
+    # Create legend labels (e.g., "NE", "BA-α=0.5")
     agg["variant"] = agg.apply(_policy_variant_label, axis=1)
 
     fig, ax = plt.subplots(figsize=(6, 4))
@@ -119,7 +171,9 @@ def plot_exp1_regret_band(df_exp1: pd.DataFrame, out_path: str):
         mean = sub["mean"]
         std = sub["std"]
 
+        # Mean line
         ax.plot(episodes, mean, label=variant, linewidth=1.2)
+        # Shaded ±1 std band
         ax.fill_between(
             episodes,
             mean - std,
@@ -138,59 +192,74 @@ def plot_exp1_regret_band(df_exp1: pd.DataFrame, out_path: str):
 
 
 # ----------------------------------------------------------------------
-# Option 2: FINAL-EPISODE BOX / SCATTER PLOT (RECOMMENDED FOR LBR)
+# Option 2: FINAL-EPISODE BAR + DOT PLOT (RECOMMENDED FOR LBR)
 # ----------------------------------------------------------------------
 
-def plot_exp1_final_regret_box(df_exp1: pd.DataFrame, out_path: str):
+def plot_exp1_final_regret_bar(df_exp1: pd.DataFrame, out_path: str):
     """
-    Plot final-episode regret distribution as a box+scatter plot for all
+    Plot final-episode regret as a simple bar+dot plot for all
     policies and BA–α variants.
 
-    This is the recommended plot for the LBR: very compact and no spaghetti.
+    This is the recommended plot for the LBR, especially when each
+    policy converges deterministically across runs (zero variance
+    within each group). It shows:
+
+        - one value per policy / BA variant
+        - clear ordering w.r.t. final regret
+        - no spaghetti, no misleading "distribution" when variance=0
     """
     df = _prepare_exp1_df(df_exp1)
 
+    # Identify the last episode index present in the data
     final_ep = df["episode"].max()
     final_df = df[df["episode"] == final_ep].copy()
+
+    # One row per run at final episode; build variant labels
     final_df["variant"] = final_df.apply(_policy_variant_label, axis=1)
 
-    # Define a consistent order: baselines first, then BA alphas
+    # If all runs converge deterministically, multiple rows per variant
+    # will have the same 'regret' value. We aggregate by mean (which
+    # therefore equals that deterministic value).
+    grouped = final_df.groupby("variant")["regret"].mean().reset_index()
+
+    # Define a consistent ordering:
+    #   1) Baselines (NE, AE, NO, PO)
+    #   2) BA variants sorted by α
     baseline_order = ["NE", "AE", "NO", "PO"]
     ba_variants = sorted(
-        v for v in final_df["variant"].unique() if v.startswith("BA-α=")
+        v for v in grouped["variant"].unique() if v.startswith("BA-α=")
     )
     variant_order = baseline_order + ba_variants
-    variant_order = [v for v in variant_order if v in final_df["variant"].unique()]
+    # Keep only variants that actually appear
+    variant_order = [v for v in variant_order if v in grouped["variant"].unique()]
+
+    # Reindex in the desired order
+    grouped = grouped.set_index("variant").loc[variant_order].reset_index()
 
     fig, ax = plt.subplots(figsize=(7, 4))
 
-    # Boxplot for distributions
-    sns.boxplot(
-        data=final_df,
+    # Simple bar plot of final regrets
+    sns.barplot(
+        data=grouped,
         x="variant",
         y="regret",
-        order=variant_order,
         ax=ax,
-        fliersize=0,          # hide whisker outliers (points shown separately)
+        color="skyblue",
+        edgecolor="black",
         width=0.7,
     )
 
-    # Overlay scatter points (each run)
-    sns.stripplot(
-        data=final_df,
-        x="variant",
-        y="regret",
-        order=variant_order,
-        ax=ax,
+    # Overlay exact mean value as a black dot
+    ax.scatter(
+        x=np.arange(len(grouped)),
+        y=grouped["regret"],
         color="black",
-        size=3,
-        alpha=0.5,
-        jitter=0.15,
+        zorder=5,
     )
 
     ax.set_xlabel("Policy / BA variant")
     ax.set_ylabel("Final-episode regret")
-    ax.set_title("Experiment 1: final-episode regret across runs")
+    ax.set_title("Experiment 1: final-episode regret per variant")
     ax.tick_params(axis="x", rotation=45)
 
     fig.tight_layout()
@@ -207,7 +276,8 @@ def plot_exp1_regret_slope(df_exp1: pd.DataFrame, out_path: str):
     Plot a slope chart mapping start-episode mean regret to final-episode
     mean regret for each policy / BA–α variant.
 
-    This shows convergence direction without full time series.
+    This shows *direction and magnitude* of change with only two time
+    points, avoiding full time-series spaghetti.
     """
     df = _prepare_exp1_df(df_exp1)
 
@@ -217,12 +287,15 @@ def plot_exp1_regret_slope(df_exp1: pd.DataFrame, out_path: str):
     df_start = df[df["episode"] == start_ep].copy()
     df_final = df[df["episode"] == final_ep].copy()
 
+    # Average over runs at start
     start_agg = (
         df_start.groupby(["policy", "alpha_mix"])["regret"]
         .mean()
         .reset_index()
         .rename(columns={"regret": "regret_start"})
     )
+
+    # Average over runs at end
     final_agg = (
         df_final.groupby(["policy", "alpha_mix"])["regret"]
         .mean()
@@ -243,6 +316,7 @@ def plot_exp1_regret_slope(df_exp1: pd.DataFrame, out_path: str):
 
     fig, ax = plt.subplots(figsize=(6, 4))
 
+    # Positions: x=0 (start), x=1 (end)
     x_positions = [0, 1]
     for _, row in merged.iterrows():
         ax.plot(
@@ -253,6 +327,7 @@ def plot_exp1_regret_slope(df_exp1: pd.DataFrame, out_path: str):
             label=row["variant"],
         )
 
+    # Deduplicate legend entries
     handles, labels = ax.get_legend_handles_labels()
     unique = dict(zip(labels, handles))
     ax.legend(unique.values(), unique.keys(), frameon=False, fontsize=8)
@@ -276,29 +351,34 @@ def plot_exp1_regret_heatmap(df_exp1: pd.DataFrame, out_path: str, n_bins: int =
     Plot a heatmap of mean regret over coarse episode bins for each
     policy / BA–α variant.
 
-    This shows temporal trends without individual time steps.
+    This aggregates over episodes (e.g., 1–10, 11–20, ...) and shows
+    temporal trends without per-episode detail, avoiding line clutter.
     """
     df = _prepare_exp1_df(df_exp1)
 
     df["variant"] = df.apply(_policy_variant_label, axis=1)
 
     ep_min, ep_max = df["episode"].min(), df["episode"].max()
+    # Build bin edges (inclusive on the left, exclusive on the right)
     bins = np.linspace(ep_min, ep_max + 1, n_bins + 1)
     df["episode_bin"] = pd.cut(
         df["episode"],
         bins=bins,
         include_lowest=True,
-        labels=[f"{int(bins[i])}–{int(bins[i+1] - 1)}" for i in range(n_bins)],
+        labels=[f"{int(bins[i])}–{int(bins[i + 1] - 1)}" for i in range(n_bins)],
     )
 
+    # Mean regret per (variant, episode_bin)
     heat = (
         df.groupby(["variant", "episode_bin"])["regret"]
         .mean()
         .reset_index()
     )
 
+    # Pivot: rows = variants, columns = episode bins
     heat_pivot = heat.pivot(index="variant", columns="episode_bin", values="regret")
 
+    # Order variants for the heatmap
     baseline_order = ["NE", "AE", "NO", "PO"]
     ba_variants = sorted(
         v for v in heat_pivot.index if v.startswith("BA-α=")
@@ -337,6 +417,9 @@ def plot_experiment2_user_type_outcomes(df_stats: pd.DataFrame, out_path: str):
       - X-axis: policy (NE, AE, NO, PO, BA)
       - Bars: mean utility (with standard deviation error bars)
       - Line (secondary axis): mean alignment
+
+    This gives a compact overview of how each policy performs across
+    user archetypes in terms of utility and preference alignment.
     """
     df = df_stats[df_stats["experiment"] == 2].copy()
 
@@ -349,8 +432,10 @@ def plot_experiment2_user_type_outcomes(df_stats: pd.DataFrame, out_path: str):
     for i, user_type in enumerate(user_types_order):
         ax = axes[i]
         sub = df[df["user_type"] == user_type].copy()
+        # Ensure consistent policy ordering (some policies may be absent)
         sub = sub.set_index("policy").reindex(policy_order).reset_index()
 
+        # Primary axis: mean utility with std error bars
         sns.barplot(
             data=sub,
             x="policy",
@@ -370,6 +455,7 @@ def plot_experiment2_user_type_outcomes(df_stats: pd.DataFrame, out_path: str):
         ax.set_xlabel("Policy")
         ax.set_ylabel("Mean utility")
 
+        # Secondary axis: mean alignment
         ax2 = ax.twinx()
         ax2.plot(
             np.arange(len(sub)),
@@ -392,15 +478,20 @@ def plot_experiment2_fairness(df_fair: pd.DataFrame, out_path: str):
     Create a fairness summary figure for Experiment 2.
 
     For each policy:
-      - Bar: overall mean utility
+      - Bar: overall mean utility across all users / archetypes
       - Vertical line: min to max utility (across user types)
+
+    This visually encodes both *performance* (mean utility) and
+    *fairness* (spread and minimum utility).
     """
     df = df_fair[df_fair["experiment"] == 2].copy()
     policy_order = ["NE", "AE", "NO", "PO", "BA"]
+
     df = df.set_index("policy").reindex(policy_order).reset_index()
 
     fig, ax = plt.subplots(figsize=(6, 4))
 
+    # Bars for overall mean utility
     sns.barplot(
         data=df,
         x="policy",
@@ -409,6 +500,7 @@ def plot_experiment2_fairness(df_fair: pd.DataFrame, out_path: str):
         errorbar=None,
     )
 
+    # Vertical lines for min–max utility range
     for i, row in df.iterrows():
         ax.vlines(
             x=i,
@@ -431,6 +523,12 @@ def plot_experiment2_fairness(df_fair: pd.DataFrame, out_path: str):
 # ---------------------------------------------------------------------------
 
 def main():
+    """
+    Command-line entry point.
+
+    By default, expects the three CSV files in the current directory and
+    writes all figures into ./figures. Paths can be overridden via flags.
+    """
     parser = argparse.ArgumentParser(
         description="Generate figures for Experiment 1 and Experiment 2."
     )
@@ -460,22 +558,25 @@ def main():
     )
     args = parser.parse_args()
 
+    # Ensure output directory exists
     os.makedirs(args.out_dir, exist_ok=True)
 
+    # Load CSVs
     exp1 = pd.read_csv(args.exp1_csv)
     exp2_stats = pd.read_csv(args.exp2_stats_csv)
     exp2_fair = pd.read_csv(args.exp2_fair_csv)
 
+    # Configure global style for all plots
     configure_plot_style()
 
-    # ---------------- Experiment 1 (alternative views) ----------------
+    # ---------------- Experiment 1 (multiple visualizations) ----------------
     plot_exp1_regret_band(
         exp1,
         out_path=os.path.join(args.out_dir, "exp1_regret_band.pdf"),
     )
-    plot_exp1_final_regret_box(
+    plot_exp1_final_regret_bar(
         exp1,
-        out_path=os.path.join(args.out_dir, "exp1_regret_final_box.pdf"),
+        out_path=os.path.join(args.out_dir, "exp1_regret_final_bar.pdf"),
     )
     plot_exp1_regret_slope(
         exp1,
