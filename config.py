@@ -54,7 +54,7 @@ class UserType:
     theta_true: Dict[str, float]
 
 
-# Minimalist: likes short, local, text-only explanations.
+# Minimalist: likes brief, local, text-only explanations.
 MINIMALIST = UserType(
     name="Minimalist",
     theta_true={

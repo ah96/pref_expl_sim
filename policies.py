@@ -13,7 +13,7 @@ This file covers:
     * AlwaysExplainPolicy (AE)
     * NormOnlyPolicy (NO)
     * PreferenceOnlyPolicy (PO)
-    * BayesianAdaptivePolicy (BA) with Beta–Bernoulli learning and α-mixing,
+    * BayesianAdaptivePolicy (BA) with Beta-Bernoulli learning and alpha-mixing,
       now considering both "explain" and "no-explain" choices.
     * OraclePolicy (OR) that knows the user's true preferences, also considering
       "explain" vs "no-explain".
@@ -67,7 +67,7 @@ def explanation_cost(attrs: Dict[str, int]) -> float:
         A scalar cost value (float).
     """
     cost = 1.0  # base cost for explaining at all
-    if attrs.get("detail", 0) == 1:
+    if attrs.get("detail", 1) == 1: # this needs to be checked further
         cost += 1.0  # extra cost for detailed explanations
     return cost
 
@@ -254,7 +254,7 @@ class BayesianAdaptivePolicy(ExplanationPolicy):
 
     Maintains Beta(a_f, b_f) posteriors over each attribute family f,
     which represent the user's preference for value=1. These posteriors
-    are updated from binary feedback via Beta–Bernoulli conjugacy.
+    are updated from binary feedback via Beta-Bernoulli conjugacy.
 
     It also uses a mixing parameter alpha_mix to blend normative priors
     with learned preferences:
@@ -376,7 +376,7 @@ class BayesianAdaptivePolicy(ExplanationPolicy):
 
     def update_from_feedback(self, feedback: Dict[str, int]) -> None:
         """
-        Beta–Bernoulli posterior update.
+        Beta-Bernoulli posterior update.
 
         For each family f:
             a_f <- a_f + y_f
