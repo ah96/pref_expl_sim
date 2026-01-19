@@ -5,15 +5,7 @@ python simulate.py \
     --alpha-grid 0.0 0.25 0.5 0.75 1.0 \
     --output-dir results/exp1
 
-python visualize_results.py \
-    --experiment 1 \
-    --input results/exp1/experiment1_runs.csv \
-    --output-dir results/figures
-
-
-
 ##########################################################################
-
 
 python simulate.py \
     --experiment 2 \
@@ -21,24 +13,7 @@ python simulate.py \
     --users-per-type 20 \
     --output-dir results/exp2
 
-python visualize_results.py \
-    --experiment 2 \
-    --input-stats results/exp2/experiment2_user_type_stats.csv \
-    --input-fairness results/exp2/experiment2_fairness.csv \
-    --output-dir results/figures
-
-
 ########################################################################
 
 # Exp 1
-python visualize_results_2.py \
-    --experiment 1 \
-    --input results/exp1/experiment1_runs.csv \
-    --output-dir results/figures
-
-# Exp 2
-python visualize_results_2.py \
-    --experiment 2 \
-    --input-stats results/exp2/experiment2_user_type_stats.csv \
-    --input-fairness results/exp2/experiment2_fairness.csv \
-    --output-dir results/figures
+python visualize_results.py
