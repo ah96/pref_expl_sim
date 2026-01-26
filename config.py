@@ -19,6 +19,47 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 import random
 
+EVENT_SALIENCE_PROB = 0.7  # keep existing behavior by default
+
+# --- Reproducible seeding (Python's built-in hash() is randomized per process) ---
+import hashlib
+
+SEED_MOD = 2 ** 32
+
+def stable_seed(*parts: object, mod: int = SEED_MOD) -> int:
+    """
+    Deterministic seed from arbitrary parts (strings, ints, floats, etc.).
+    Stable across runs, machines, and Python invocations.
+    """
+    s = "|".join(str(p) for p in parts).encode("utf-8")
+    digest = hashlib.sha256(s).digest()
+    # Use first 8 bytes for a large integer; mod to fit Random seed range
+    return int.from_bytes(digest[:8], "big") % mod
+
+
+# --- Feedback parameters used by both sampler and expected-utility computations ---
+P_LIKE_MATCH = 0.85
+P_LIKE_MISMATCH = 0.25
+
+def expected_like_prob(theta_pref_one: float, chosen_value: int,
+                       p_like_match: float = P_LIKE_MATCH,
+                       p_like_mismatch: float = P_LIKE_MISMATCH) -> float:
+    """
+    Expected P(feedback=1) under the SAME generative process as sample_feedback():
+
+      - latent preferred value v* ~ Bernoulli(theta_pref_one)
+      - if chosen matches v* => like with p_like_match else p_like_mismatch
+    """
+    theta = float(theta_pref_one)
+    x = int(chosen_value)
+
+    if x == 1:
+        return theta * p_like_match + (1.0 - theta) * p_like_mismatch
+    else:
+        # x == 0 matches when v* == 0
+        return (1.0 - theta) * p_like_match + theta * p_like_mismatch
+
+
 # ---------------------------------------------------------------------------
 # Attribute families and values
 # ---------------------------------------------------------------------------

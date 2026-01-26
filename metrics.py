@@ -54,6 +54,12 @@ class EpisodeLog:
     oracle_utility: Optional[float] = None
     regret: Optional[float] = None
 
+    policy_utility_expected: float = 0.0
+    oracle_utility_sampled: float = 0.0
+    oracle_utility_expected: float = 0.0
+    regret_sampled: float = 0.0
+
+
 
 @dataclass
 class UserRunLog:
