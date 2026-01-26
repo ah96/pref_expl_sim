@@ -1,95 +1,79 @@
-# Preference-Aware Robot Explanations: Simulation Framework  
-**HRI 2026 Late-Breaking Report – Code Release**
+# Preference-Aware Robot Explanations: Simulation Framework
+**HRI 2026 Late-Breaking Report – Camera-Ready Code Release**
 
-This repository contains the simulation framework used in our HRI 2026 Late-Breaking Report on *preference-aware robot explanations*.  
-The framework models explanation decisions as probabilistic choices, learns user preferences via Beta–Bernoulli posteriors, and evaluates multiple explanation policies across diverse user archetypes.
+This repository contains the *final, camera-ready* simulation framework accompanying the HRI 2026 Late-Breaking Report:
 
----
+> **Simulating Preference-Aware Robot Explanations: A Probabilistic Perspective on When and How to Explain**
 
-## Key Features
-
-- **Probabilistic explanation model**  
-  Explanation decisions (whether to explain + how to explain) are treated as actions.
-
-- **Bayesian preference learning**  
-  Per-user Beta–Bernoulli updates from binary feedback.
-
-- **Norm–preference mixing (α)**  
-  Balances explanatory norms with user preferences.
-
-- **Policies implemented**  
-  - NE — Never Explain  
-  - AE — Always Explain  
-  - NO — Norm-Only  
-  - PO — Preference-Only  
-  - BA — Bayesian Adaptive  
-  - OR — Oracle (for regret)
-
-- **User archetypes**  
-  Minimalist, ContextHungry, VisualLearner, NormFollower.
-
-- **Two experiments**  
-  - Experiment 1: Single-user adaptation + α sweep  
-  - Experiment 2: Population-level fairness
-
-- **Publication-ready PDF figures**
+The framework models *when* and *how* a robot should explain its behavior under heterogeneous user preferences, normative expectations, and interaction costs. It is fully self-contained, deterministic (seeded), and designed for reproducibility and clarity.
 
 ---
 
-## Repository Structure
+## Overview
 
-pref_expl_sim/
-├── simulate.py # Main CLI simulation tool
-├── visualize_results.py # Figure generation
-├── config.py # Configuration and metrics
-├── policies.py # Policy implementations
-├── users.py # User models + feedback
-├── README.md
-├── requirements.txt
-├── results/ # Auto-created experiment outputs
-│ ├── exp1/
-│ └── exp2/
-└── figs/ # Auto-created figures
+The core idea is to treat explanation generation as a **sequential decision-making problem under uncertainty**:
 
+- At each episode, the robot observes a situation (response type + salience).
+- It decides **whether to explain** and **which explanation attributes** to use.
+- Users provide noisy binary feedback reflecting latent preferences.
+- A Bayesian Adaptive (BA) policy learns user preferences online and balances them against norms.
+
+The framework evaluates this trade-off using **utility**, **preference alignment**, **explanation cost**, **curiosity penalties**, and **oracle-based regret**.
+
+---
+
+## Implemented Explanation Attributes
+
+Each explanation is parameterized by three **binary attribute families**:
+
+| Attribute | 0 | 1 |
+|---------|---|---|
+| Modality | Text | Text + Visual |
+| Scope | Local | Global |
+| Detail | Brief | Detailed |
+
+---
+
+## User Archetypes
+
+- Minimalist  
+- ContextHungry  
+- VisualLearner  
+- NormFollower  
+
+Defined in `config.py`.
+
+---
+
+## Explanation Policies
+
+NE, AE, NO, PO, BA, OR (oracle for regret).
 
 ---
 
 ## Installation
 
-Requires **Python 3.8**.
-
 ```bash
-python3.8 -m venv venv
+python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+```
 
-python simulate.py --help
+---
 
-python simulate.py \
-    --experiment 1 \
-    --user-type Minimalist \
-    --episodes 50 \
-    --alpha-grid 0.0 0.25 0.5 0.75 1.0 \
-    --output-dir results/exp1
+## Experiments
 
-results/exp1/experiment1_runs.csv
+See paper Section 4. Commands mirror the camera-ready results.
 
-python simulate.py \
-    --experiment 2 \
-    --episodes 50 \
-    --output-dir results/exp2
+---
 
-python visualize_results.py --help
+## Citation
 
-python visualize_results.py \
-    --experiment 1 \
-    --input results/exp1/experiment1_runs.csv \
-    --output-dir figs \
-    --user-type Minimalist
-
-python visualize_results.py \
-    --experiment 2 \
-    --input-stats results/exp2/experiment2_user_type_stats.csv \
-    --input-fairness results/exp2/experiment2_fairness.csv \
-    --output-dir figs
-
+```bibtex
+@inproceedings{halilovic2026preference,
+  title={Simulating Preference-Aware Robot Explanations: A Probabilistic Perspective on When and How to Explain},
+  author={Halilovic, Amar and Krivic, Senka},
+  booktitle={Companion of the 2026 ACM/IEEE International Conference on Human-Robot Interaction},
+  year={2026}
+}
+```

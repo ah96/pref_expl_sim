@@ -320,7 +320,6 @@ def run_experiment2(
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     stats_path = output_dir / "experiment2_user_type_stats.csv"
-    fair_path = output_dir / "experiment2_fairness.csv"
 
     pop_theta = {
         fam: float(np.mean([u.theta_true[fam] for u in ALL_ARCHETYPES]))
@@ -363,26 +362,7 @@ def run_experiment2(
                     vals["mean_expl_load"],
                 ])
 
-    with fair_path.open("w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow([
-            "experiment", "policy",
-            "overall_mean_utility", "utility_variance",
-            "min_utility", "max_utility",
-        ])
-        for pname, pm in metrics_by_policy.items():
-            fs = pm.fairness_summary()
-            writer.writerow([
-                2,
-                pname,
-                fs["overall_mean_utility"],
-                fs["utility_variance"],
-                fs["min_utility"],
-                fs["max_utility"],
-            ])
-
     print("[Experiment 2] Wrote:", stats_path)
-    print("[Experiment 2] Wrote:", fair_path)
 
 
 # ---------------------------------------------------------------------------
