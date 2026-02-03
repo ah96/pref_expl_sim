@@ -25,6 +25,20 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 
+# Ensure Matplotlib uses scalable TrueType fonts (avoid Type-3 bitmap fonts in PDF exports)
+import matplotlib as mpl
+# Use Type 42 (TrueType) for PDF/PS output
+mpl.rcParams['pdf.fonttype'] = 42
+mpl.rcParams['ps.fonttype']  = 42
+# SVG: keep actual font references (do not convert to paths)
+mpl.rcParams['svg.fonttype'] = 'none'
+# Prefer a known TrueType font (DejaVu is bundled with matplotlib)
+mpl.rcParams['font.family'] = 'sans-serif'
+mpl.rcParams['font.sans-serif'] = ['DejaVu Sans']
+# Make sure we are NOT using LaTeX text rendering (unless you intentionally want it)
+mpl.rcParams['text.usetex'] = False
+
+
 # ---------------------------------------------------------------------------
 # General plotting style
 # ---------------------------------------------------------------------------

@@ -6,7 +6,10 @@ Command-line interface and core simulation logic for the preference-aware
 explanation framework.
 
 How to run (experiment 1):
-python3 simulate.py --experiment 1 --user-type Minimalist --episodes 100 --alpha-grid 0 0.25 0.5 0.75 1 --output-dir results/exp1
+python3 simulate.py --experiment 1 --user-type Minimalist --episodes 50 --alpha-grid 0 0.25 0.5 0.75 1 --output-dir results/exp1
+python3 simulate.py --experiment 1 --user-type ContextHungry --episodes 50 --alpha-grid 0 0.25 0.5 0.75 1 --output-dir results/exp1
+python3 simulate.py --experiment 1 --user-type VisualLearner --episodes 50 --alpha-grid 0 0.25 0.5 0.75 1 --output-dir results/exp1
+python3 simulate.py --experiment 1 --user-type NormFollower --episodes 50 --alpha-grid 0 0.25 0.5 0.75 1 --output-dir results/exp1
 
 How to run (experiment 2):
 python3 simulate.py --experiment 2 --episodes 50 --users-per-type 20 --output-dir results/exp2
@@ -451,8 +454,8 @@ def main() -> None:
         description="Run simulation experiments for preference-aware explanations."
     )
     parser.add_argument(
-        "--experiment", type=int, choices=[1, 2, 3, 4], required=True,
-        help="Experiment ID: 1 (single-user + alpha sweep), 2 (population), 3 (learning curve over N), 4 (alpha sweep all archetypes).",
+        "--experiment", type=int, choices=[1, 2, 3], required=True,
+        help="Experiment ID: 1 (single-user + alpha sweep), 2 (population), 3 (learning curve over N).",
     )
     parser.add_argument(
         "--user-type", type=str,
