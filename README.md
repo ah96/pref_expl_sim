@@ -70,10 +70,11 @@ See paper Section 4. Commands mirror the camera-ready results.
 ## Citation
 
 ```bibtex
-@inproceedings{halilovic2026preference,
+@inproceedings{halilovic2026simulating,
   title={Simulating Preference-Aware Robot Explanations: A Probabilistic Perspective on When and How to Explain},
   author={Halilovic, Amar and Krivic, Senka},
-  booktitle={Companion of the 2026 ACM/IEEE International Conference on Human-Robot Interaction},
+  booktitle={Companion Proceedings of the 21st ACM/IEEE International Conference on Human-Robot Interaction},
+  pages={706--710},
   year={2026}
 }
 ```
